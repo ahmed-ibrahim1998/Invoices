@@ -2,13 +2,19 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\invoice_attachments;
-use App\Models\invoices;
-use App\Models\invoices_details;
-use App\Models\sections;
+use App\Exports\InvoicesExport;
+use App\invoice_attachments;
+use App\invoices;
+use App\invoices_details;
+use App\Notifications\Add_Invoice;
+use App\sections;
+use App\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
+use Maatwebsite\Excel\Facades\Excel;
 
 class InvoicesController extends Controller
 {
@@ -20,7 +26,7 @@ class InvoicesController extends Controller
     public function index()
     {
         $invoices = invoices::all();
-        return view('invoices.invoices',compact('invoices'));
+        return view('invoices.invoices', compact('invoices'));
     }
 
     /**
@@ -93,6 +99,19 @@ class InvoicesController extends Controller
             $request->pic->move(public_path('Attachments/' . $invoice_number), $imageName);
         }
 
+
+        // to send notification to main
+//        $user  = User::first();
+//         Notification::send($user, new InvoicePaid($invoice_id));
+//        $user->notify(InvoicePaid::class,$invoice_id);
+
+
+        // to send notification from database
+
+        $user = User::first();
+        $invoices = invoices::latest()->first(); // هيجيب اخر رقم فاتوره تم حفظه
+        Notification::send($user, new Add_Invoice($invoices));
+
         session()->flash('Add', 'تم اضافة الفاتورة بنجاح');
         return back();
 
@@ -104,9 +123,10 @@ class InvoicesController extends Controller
      * @param \App\Models\invoices $invoices
      * @return \Illuminate\Http\Response
      */
-    public function show(invoices $invoices)
+    public function show($id)
     {
-        //
+        $invoices = invoices::where('id', $id)->first();
+        return view('invoices.status_update', compact('invoices'));
     }
 
     /**
@@ -115,9 +135,11 @@ class InvoicesController extends Controller
      * @param \App\Models\invoices $invoices
      * @return \Illuminate\Http\Response
      */
-    public function edit(invoices $invoices)
+    public function edit($id)
     {
-        //
+        $invoices = invoices::where('id', $id)->first();
+        $sections = sections::all();
+        return view('invoices.edit_invoice', compact('sections', 'invoices'));
     }
 
     /**
@@ -127,9 +149,26 @@ class InvoicesController extends Controller
      * @param \App\Models\invoices $invoices
      * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, invoices $invoices)
+    public function update(Request $request)
     {
-        //
+        $invoices = invoices::findOrFail($request->invoice_id);
+        $invoices->update([
+            'invoice_number' => $request->invoice_number,
+            'invoice_Date' => $request->invoice_Date,
+            'Due_date' => $request->Due_date,
+            'product' => $request->product,
+            'section_id' => $request->Section,
+            'Amount_collection' => $request->Amount_collection,
+            'Amount_Commission' => $request->Amount_Commission,
+            'Discount' => $request->Discount,
+            'Value_VAT' => $request->Value_VAT,
+            'Rate_VAT' => $request->Rate_VAT,
+            'Total' => $request->Total,
+            'note' => $request->note,
+        ]);
+
+        session()->flash('edit', 'تم تعديل الفاتورة بنجاح');
+        return back();
     }
 
     /**
@@ -138,9 +177,32 @@ class InvoicesController extends Controller
      * @param \App\Models\invoices $invoices
      * @return \Illuminate\Http\Response
      */
-    public function destroy(invoices $invoices)
+    public function destroy(Request $request)
     {
-        //
+        $id = $request->invoice_id;
+        $invoices = invoices::where('id', $id)->first();
+        $Details = invoice_attachments::where('invoice_id', $id)->first();
+
+        $id_page = $request->id_page;
+
+
+        if (!$id_page == 2) {
+
+            if (!empty($Details->invoice_number)) {
+
+//                Storage::disk('public_uploads')->delete($Details->invoice_number. '/'. $Details->file_name); // to delete file inside directory
+                Storage::disk('public_uploads')->deleteDirectory($Details->invoice_number); // to delete directory and all file inside it
+            }
+
+            $invoices->forcedelete();  // difference between forceDelete ==> delete record نهائيا and Delete == delete record from view and add date to date in delete_at in table
+            session()->flash('delete_invoice');
+            return redirect('/invoices');
+
+        } else {
+            $invoices->Delete();  // difference between forceDelete ==> delete record نهائيا and Delete == delete record from view and add date to date in delete_at in table
+            session()->flash('archive_invoice');
+            return redirect('/Archive');
+        }
     }
 
     public function getproducts($id)
@@ -148,4 +210,110 @@ class InvoicesController extends Controller
         $products = DB::table("products")->where("section_id", $id)->pluck("product_name", "id");
         return json_encode($products);
     }
+
+    public function status_update($id, Request $request)
+    {
+        $invoices = invoices::findOrFail($id);
+
+        if ($request->Status === 'مدفوعة') {
+
+            $invoices->update([
+                'Value_Status' => 1,
+                'Status' => $request->Status,
+                'Payment_Date' => $request->Payment_Date,
+            ]);
+
+            invoices_Details::create([
+                'id_Invoice' => $request->invoice_id,
+                'invoice_number' => $request->invoice_number,
+                'product' => $request->product,
+                'Section' => $request->Section,
+                'Status' => $request->Status,
+                'Value_Status' => 1,
+                'note' => $request->note,
+                'Payment_Date' => $request->Payment_Date,
+                'user' => (Auth::user()->name),
+            ]);
+        } else {
+            $invoices->update([
+                'Value_Status' => 3,
+                'Status' => $request->Status,
+                'Payment_Date' => $request->Payment_Date,
+            ]);
+            invoices_Details::create([
+                'id_Invoice' => $request->invoice_id,
+                'invoice_number' => $request->invoice_number,
+                'product' => $request->product,
+                'Section' => $request->Section,
+                'Status' => $request->Status,
+                'Value_Status' => 3,
+                'note' => $request->note,
+                'Payment_Date' => $request->Payment_Date,
+                'user' => (Auth::user()->name),
+            ]);
+        }
+        session()->flash('Status_Update');
+        return redirect('/invoices');
+    }
+
+    public function Invoice_Paid()
+    {
+        $invoices = Invoices::where('Value_Status', 1)->get();
+        return view('invoices.invoices_paid', compact('invoices'));
+    }
+
+    public function Invoice_unPaid()
+    {
+        $invoices = Invoices::where('Value_Status', 2)->get();
+        return view('invoices.invoices_unpaid', compact('invoices'));
+    }
+
+    public function Invoice_Partial()
+    {
+        $invoices = Invoices::where('Value_Status', 3)->get();
+        return view('invoices.invoices_Partial', compact('invoices'));
+    }
+
+    public function Print_invoice($id)
+    {
+        $invoices = invoices::where('id', $id)->first();
+        return view('invoices.Print_invoices', compact('invoices'));
+    }
+
+    public function export()
+    {
+        return Excel::download(new InvoicesExport, 'قائمة الفواتير.xlsx');
+    }
+
+
+    public function MarkAsRead_all (Request $request)
+    {
+
+        $userUnreadNotification= auth()->user()->unreadNotifications;
+
+        if($userUnreadNotification) {
+            $userUnreadNotification->markAsRead();
+            return back();
+        }
+
+
+    }
+
+    public function unreadNotifications_count()
+
+    {
+        return auth()->user()->unreadNotifications->count();
+    }
+
+    public function unreadNotifications()
+
+    {
+        foreach (auth()->user()->unreadNotifications as $notification){
+
+            return $notification->data['title'];
+
+        }
+
+    }
+
 }

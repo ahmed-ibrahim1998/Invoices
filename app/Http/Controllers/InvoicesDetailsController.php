@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\invoice_attachments;
-use App\Models\invoices;
-use App\Models\invoices_details;
+use App\invoice_attachments;
+use App\invoices;
+use App\invoices_details;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use File;
@@ -107,5 +107,4 @@ class InvoicesDetailsController extends Controller
 
         return response()->file($files);
     }
-
 }

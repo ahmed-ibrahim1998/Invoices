@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\products;
-use App\Models\sections;
+use App\products;
+use App\sections;
 use Illuminate\Http\Request;
 
 class ProductsController extends Controller

@@ -37,4 +37,11 @@ class LoginController extends Controller
     {
         $this->middleware('guest')->except('logout');
     }
+
+    // To Check User Status
+    protected function credentials(\Illuminate\Http\Request $request)
+    {
+        return ['email' => $request->email, 'password' => $request->password, 'status' => 'مفعل'];
+    }
+
 }

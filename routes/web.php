@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\InvoiceAchiveController;
+use App\Http\Controllers\InvoicesController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -24,16 +26,64 @@ Auth::routes();
 
 Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name('home');
 
-Route::resource('invoices', 'App\Http\Controllers\InvoicesController');
-Route::resource('sections', 'App\Http\Controllers\SectionsController');
-Route::resource('products', 'App\Http\Controllers\ProductsController');
-Route::get('/section/{id}', [App\Http\Controllers\InvoicesController::class, 'getproducts']);
-Route::get('/InvoicesDetails/{id}', [App\Http\Controllers\InvoicesDetailsController::class, 'edit']);
+Route::resource('invoices', 'InvoicesController');
 
-Route::get('download/{invoice_number}/{file_name}', [App\Http\Controllers\InvoicesDetailsController::class,'get_file']);
+Route::resource('sections', 'SectionsController');
 
-Route::get('View_file/{invoice_number}/{file_name}',  [App\Http\Controllers\InvoicesDetailsController::class,'open_file']);
+Route::resource('products', 'ProductsController');
 
-Route::post('delete_file', [App\Http\Controllers\InvoicesDetailsController::class,'destroy'])->name('delete_file');
+Route::resource('InvoiceAttachments', 'InvoiceAttachmentsController');
 
-Route::get('/{page}', [\App\Http\Controllers\AdminController::class, 'index']);
+Route::get('/section/{id}', [InvoicesController::class, 'getproducts']);
+
+Route::get('/edit_invoice/{id}', 'InvoicesController@edit');
+
+Route::get('Status_show/{id}', [InvoicesController::class, 'show'])->name('Status_show');
+
+Route::post('Status_Update/{id}', [InvoicesController::class, 'status_update'])->name('Status_Update');
+
+Route::get('/InvoicesDetails/{id}', 'InvoicesDetailsController@edit');
+
+Route::get('download/{invoice_number}/{file_name}', 'InvoicesDetailsController@get_file');
+
+Route::get('View_file/{invoice_number}/{file_name}', 'InvoicesDetailsController@open_file');
+
+Route::post('delete_file', 'InvoicesDetailsController@destroy')->name('delete_file');
+
+Route::get('Invoice_Paid', [InvoicesController::class, 'Invoice_Paid']);
+
+Route::get('Invoice_UnPaid', [InvoicesController::class, 'Invoice_UnPaid']);
+
+Route::get('Invoice_Partial', [InvoicesController::class, 'Invoice_Partial']);
+
+Route::resource('Archive', 'InvoiceArchiveController');
+
+Route::get('Print_invoice/{id}', [InvoicesController::class, 'Print_invoice']);
+
+Route::get('export_invoices', [InvoicesController::class, 'export']);
+
+
+Route::group(['middleware' => ['auth']], function () {
+
+    Route::resource('roles', 'RoleController');
+
+    Route::resource('users', 'UserController');
+
+});
+
+
+Route::get('invoices_report', 'Invoices_Report@index');
+
+Route::post('Search_invoices', 'Invoices_Report@Search_invoices');
+
+Route::get('customers_report', 'Customers_Report@index')->name("customers_report");
+
+Route::post('Search_customers', 'Customers_Report@Search_customers');
+
+Route::get('MarkAsRead_all','InvoicesController@MarkAsRead_all')->name('MarkAsRead_all');
+
+Route::get('unreadNotifications_count', 'InvoicesController@unreadNotifications_count')->name('unreadNotifications_count');
+
+Route::get('unreadNotifications', 'InvoicesController@unreadNotifications')->name('unreadNotifications');
+
+Route::get('/{page}', 'AdminController@index');
